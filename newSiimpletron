@@ -1,0 +1,163 @@
+import java.util.Scanner;
+
+public class Simpletron {
+    private int pc;              // program counter
+    private String ir;           // instruction register
+    private String opcode;       // operation code
+    private String operand;      // operand
+    private Memory memory;       // memory
+    private String accumulator;  // accumulator
+    private String filename;     // file to load program
+    private boolean running;     // execution state
+    private Scanner scanner;
+
+    public Simpletron(String filename) {
+        this.filename = filename;
+        this.memory = new Memory();
+        MemoryLoader loader = new MemoryLoader();
+        loader.memoryLoader(filename);
+        this.memory = loader.mem;
+
+        this.pc = 0;
+        this.accumulator = "0000";
+        this.running = true;
+        this.scanner = new Scanner(System.in);
+    }
+
+    /** Run normally until HALT, only final dump */
+    public void run() {
+        System.out.println("Simpletron execution begins...\n");
+        while (running) {
+            executeNext(false); // run silently
+        }
+        System.out.println("\nSimpletron execution terminated.");
+        dumpRegisters();
+        memory.dump();
+    }
+
+    /** Run step-by-step, showing each instruction + state */
+    public void step() {
+        System.out.println("Simpletron step execution begins...\n");
+        while (running) {
+            executeNext(true); // run with detailed trace
+        }
+        System.out.println("\nSimpletron execution terminated.");
+        dumpRegisters();
+        memory.dump();
+    }
+
+    /** Core fetch-decode-execute cycle (used by both run & step) */
+    private void executeNext(boolean trace) {
+        // FETCH
+        ir = fetch(pc);
+        pc++;
+
+        // DECODE
+        opcode = ir.substring(0, 2);
+        operand = ir.substring(2, 4);
+
+        // EXECUTE
+        decode(opcode);
+
+        if (trace) {
+            dumpRegisters();
+            memory.dump();
+            System.out.println("-----------------------------------\n");
+        }
+    }
+
+    public String fetch(int address) {
+        String instruction = memory.getitem(address);
+        if (instruction == null) instruction = "0000";
+        return instruction;
+    }
+
+    public void store(int address) {
+        memory.additem(address, accumulator);
+    }
+
+    public void decode(String opcode) {
+        int addr = Integer.parseInt(operand);
+        int accVal = Integer.parseInt(accumulator);
+
+        switch (opcode) {
+            // I/O
+            case "10": // READ
+                System.out.print("Enter a number: ");
+                try {
+                    int input = scanner.nextInt();
+                    memory.additem(addr, String.format("%04d", input));
+                } catch (Exception e) {
+                    System.out.println("Invalid input! Storing 0000.");
+                    memory.additem(addr, "0000");
+                    scanner.nextLine();
+                }
+                break;
+
+            case "11": // WRITE
+                System.out.println("Output: " + memory.getitem(addr));
+                break;
+
+            // Memory
+            case "20": accumulator = memory.getitem(addr); break; // LOAD
+            case "21": store(addr); break; // STORE
+
+            // Arithmetic (memory)
+            case "30": accumulator = String.format("%04d", accVal + Integer.parseInt(memory.getitem(addr))); break;
+            case "31": accumulator = String.format("%04d", accVal - Integer.parseInt(memory.getitem(addr))); break;
+            case "32":
+                int divisor = Integer.parseInt(memory.getitem(addr));
+                if (divisor == 0) { System.out.println("Error: Division by zero!"); running = false; }
+                else accumulator = String.format("%04d", accVal / divisor);
+                break;
+            case "33":
+                int mod = Integer.parseInt(memory.getitem(addr));
+                if (mod == 0) { System.out.println("Error: Division by zero in MOD!"); running = false; }
+                else accumulator = String.format("%04d", accVal % mod);
+                break;
+            case "34": accumulator = String.format("%04d", accVal * Integer.parseInt(memory.getitem(addr))); break;
+
+            // Arithmetic (immediate)
+            case "35": accumulator = String.format("%04d", accVal + addr); break; // ADDI
+            case "36": accumulator = String.format("%04d", accVal - addr); break; // SUBI
+            case "37": // DIVI
+                if (addr == 0) { System.out.println("Error: Division by zero in DIVI!"); running = false; }
+                else accumulator = String.format("%04d", accVal / addr);
+                break;
+            case "38": // MODI
+                if (addr == 0) { System.out.println("Error: Division by zero in MODI!"); running = false; }
+                else accumulator = String.format("%04d", accVal % addr);
+                break;
+            case "39": accumulator = String.format("%04d", accVal * addr); break; // MULI
+
+            // Branching
+            case "40": pc = addr; break; // BRANCH
+            case "41": if (accVal < 0) pc = addr; break; // BRANCHNEG
+            case "42": if (accVal == 0) pc = addr; break; // BRANCHZERO
+            case "43": running = false; break; // HALT
+
+            default:
+                System.out.println("Invalid opcode: " + opcode);
+                running = false;
+        }
+    }
+
+    private void dumpRegisters() {
+        System.out.println("\nREGISTERS:");
+        System.out.printf("accumulator: %s%n", accumulator);
+        System.out.printf("programCounter: %02d%n", pc);
+        System.out.printf("instructionRegister: %s%n", ir);
+        System.out.printf("opcode: %s%n", opcode);
+        System.out.printf("operand: %s%n", operand);
+    }
+
+    public static void main(String... args) {
+        Simpletron s = new Simpletron("test.txt");
+
+        // Example: run normally
+        // s.run();
+
+        // Example: run step-by-step
+        s.step();
+    }
+}
